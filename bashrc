@@ -43,3 +43,7 @@ fi
 if [ -f ~/.shell_private ]; then
     source ~/.shell_private
 fi
+
+
+# Added by Antigravity CLI installer
+export PATH="/home/ghoti/.local/bin:$PATH"

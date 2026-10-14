@@ -46,3 +46,7 @@ fi
 if [ -f ~/.shell_private ]; then
     source ~/.shell_private
 fi
+
+# >>> Codex installer >>>
+export PATH="/home/ghoti/.local/bin:$PATH"
+# <<< Codex installer <<<
