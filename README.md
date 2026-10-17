@@ -1,15 +1,17 @@
 # Dotfiles [![Build Status](https://github.com/Catkamakura/dotfiles/actions/workflows/ci.yml/badge.svg)](https://github.com/Catkamakura/dotfiles/actions/workflows/ci.yml)
 
 After cloning this repo, run `./install` to link the configuration and initialize
-the pinned shell and Emacs plugins. It can be run multiple times. Existing
+the pinned shell, Vim, and Emacs plugins. It can be run multiple times. Existing
 regular files are not overwritten: move conflicting files to a backup first.
 The installer does not delete untracked plugin files or upgrade plugin versions.
 
-Install Git, Python 3, Zsh 5.8+, Neovim 0.11+, and optionally tmux with your
+Install Git, Python 3, Zsh 5.8+, Vim 8+ and/or Neovim 0.11+, and optionally tmux with your
 system package manager. The installer configures these programs; it does not
 install them or change your login shell. Start Zsh with `exec zsh -l` after
-installation. `EDITOR` defaults to Neovim when available, with `vi` as a fallback;
-an existing `EDITOR`/`VISUAL` choice takes precedence.
+installation. `EDITOR` defaults to the first available editor in this order:
+`nvim`, `vim`, `vi`. Existing `EDITOR`/`VISUAL` choices take precedence. Git's
+diff and merge tools are selected from installed tools instead of requiring
+Neovim; set a preferred tool in `~/.gitconfig_local` if needed.
 
 The shell uses Solarized colors when the terminal supports 256 colors. Keep
 machine-specific setup in the local files below.
@@ -22,6 +24,7 @@ Making Local Customizations
 You can make local customizations for some programs by editing these files:
 
 * `neovim` : `~/.nvim_local.lua`
+* `vim` : `~/.vimrc_local`
 * `emacs` : `~/.emacs_local`
 * `zsh` / `bash` : `~/.shell_local_before` run first
 * `zsh` : `~/.zshrc_local_before` run before `.zshrc`
@@ -37,6 +40,8 @@ When moving from Bash to Zsh, translate machine-specific PATH entries, tool
 initializers, and aliases into `~/.zshrc_local_after`. Do not source `.bashrc`
 from Zsh: `shopt`, Bash completion, and Bash prompt escapes are incompatible.
 Only settings that should run in both shells belong in `.shell_local_*`.
+For example, to prefer Vim on one machine even when Neovim is installed, add
+`export EDITOR=vim VISUAL=vim` to `~/.shell_local_before`.
 
 Pasting over SSH
 ----------------
@@ -51,17 +56,22 @@ escape sequences arriving over SSH. To tune it, put `DOTFILES_KEYTIMEOUT=60` in
 100 ms escape timeout, adjustable in `~/.tmux_local.conf`.
 See the [Zsh line editor documentation][zle] and [tmux escape-time FAQ][tmux-escape].
 
-Neovim
-------
+Vim and Neovim
+--------------
+
+Both editors are configured by `./install`; either can be used independently.
+Vim loads `~/.vimrc` and `~/.vim`, including the pinned Vim plugins and familiar
+NERDTree, CtrlP, and Fugitive shortcuts. Neovim uses its own Lua configuration
+and native features. Each editor has a separate machine-local override file.
 
 `nvim/init.lua` is linked to `${XDG_CONFIG_HOME:-~/.config}/nvim`. It uses native
 Neovim features, persistent undo, built-in file browsing, and installed
 Treesitter parsers. LSP completion is enabled when a server attaches; configure
 servers/plugins in `~/.nvim_local.lua`. Nothing is downloaded when the editor
-starts. Legacy Vim files remain available in the repository, but installation
-no longer links them or fetches their plugins.
+starts. It does not load the Vim config or its plugins.
 
-Useful keys (leader is `\`):
+Useful Neovim keys (leader is `\`; split navigation, relative numbers, and
+wrapped-line movement use the same keys in Vim):
 
 | Key | Action |
 | --- | --- |
@@ -79,16 +89,17 @@ language server attaches. `:checkhealth` checks local providers and tooling.
 Tests
 -----
 
-With Zsh, Bash, Neovim, tmux, Python 3, and the Python `pexpect` package installed:
+With Zsh, Bash, Vim, Neovim, tmux, Python 3, and the Python `pexpect` package installed:
 
 ```sh
-git submodule update --init --recursive -- .dotbot shell/plugins/ zsh/plugins/
+git submodule update --init --recursive -- .dotbot shell/plugins/ vim/pack/vendor/start/ zsh/plugins/
 python3 tests/test_dotfiles.py
 ```
 
 The suite uses temporary home directories and real pseudo-terminals to check
 SSH-like delayed paste markers, multiline pastes, shell startup, prompt cleanup,
-path helpers, Neovim filetype isolation, tmux configuration, and repeatable links.
+path helpers, editor selection, Vim and Neovim filetype isolation, tmux
+configuration, and repeatable links for both editors.
 CI runs these checks on Linux and macOS.
 
 License

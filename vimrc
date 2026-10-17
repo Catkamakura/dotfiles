@@ -16,10 +16,12 @@ augroup END
 " vim can autodetect this based on $TERM (e.g. 'xterm-256color')
 " but it can be set to force 256 colors
 " set t_Co=256
-if has('gui_running')
+let s:has_solarized = !empty(globpath(&runtimepath, 'colors/solarized.vim'))
+    \ || !empty(globpath(&packpath, 'pack/*/start/*/colors/solarized.vim'))
+if has('gui_running') && s:has_solarized
     colorscheme solarized
     let g:lightline = {'colorscheme': 'solarized'}
-elseif &t_Co < 256
+elseif &t_Co < 256 || !s:has_solarized
     colorscheme default
     set nocursorline " looks bad in this mode
 else
@@ -35,6 +37,7 @@ else
     " patches
     highlight CursorLineNr cterm=NONE
 endif
+unlet s:has_solarized
 
 filetype plugin indent on " enable file type detection
 set autoindent

@@ -16,10 +16,10 @@ jobs:
       - uses: actions/checkout@v7
       - name: Install test tools (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y zsh tmux shellcheck
+        run: sudo apt-get update && sudo apt-get install -y zsh tmux vim shellcheck
       - name: Install test tools (macOS)
         if: runner.os == 'macOS'
-        run: brew install tmux shellcheck
+        run: brew install tmux vim shellcheck
       - name: Install Neovim 0.11.6
         shell: bash
         run: |
@@ -34,8 +34,8 @@ jobs:
             -o "$RUNNER_TEMP/nvim.tar.gz"
           tar -xzf "$RUNNER_TEMP/nvim.tar.gz" -C "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/$nvim_archive/bin" >> "$GITHUB_PATH"
-      - name: Initialize installer and shell plugins
-        run: git submodule update --init --recursive -- .dotbot shell/plugins/ zsh/plugins/
+      - name: Initialize installer, shell, and Vim plugins
+        run: git submodule update --init --recursive -- .dotbot shell/plugins/ vim/pack/vendor/start/ zsh/plugins/
       - name: Shell checks
         shell: bash
         run: |

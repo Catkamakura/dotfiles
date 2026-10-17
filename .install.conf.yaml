@@ -33,9 +33,11 @@
     ~/.screenrc:
     ~/.shell:
     ~/.tmux.conf:
+    ~/.vim:
+    ~/.vimrc:
     ~/.zsh:
     ~/.zshrc:
 
 - shell:
   - git submodule sync --recursive
-  - git submodule update --init --recursive -- emacs.d/vendor/ shell/plugins/ zsh/plugins/
+  - git submodule update --init --recursive -- emacs.d/vendor/ shell/plugins/ vim/pack/vendor/start/ zsh/plugins/

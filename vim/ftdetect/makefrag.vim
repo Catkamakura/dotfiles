@@ -1,1 +1,1 @@
-au BufRead Makefrag setf make
+au BufRead,BufNewFile Makefrag setf make

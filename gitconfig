@@ -85,7 +85,7 @@
 
 [merge]
 	defaultToUpstream = true
-	tool = nvimdiff
+	# Let Git choose an installed tool; override in ~/.gitconfig_local if desired.
 
 [pull]
 	ff = only

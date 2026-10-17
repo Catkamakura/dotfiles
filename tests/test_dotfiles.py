@@ -201,6 +201,25 @@ source "$DOTFILES_TEST_REPO/shell/bootstrap.sh"
 '''])
         self.assert_success(result)
 
+    def test_editor_defaults_with_either_or_both_editors(self):
+        for available in (("nvim", "vim", "vi"), ("vim", "vi"), ("vi",)):
+            fake_bin = self.user_dir / "-".join(available)
+            fake_bin.mkdir()
+            for editor in available:
+                executable = fake_bin / editor
+                executable.write_text("#!/bin/sh\nexit 0\n")
+                executable.chmod(0o755)
+            self.env["PATH"] = str(fake_bin)
+            for shell in (BASH, ZSH):
+                with self.subTest(shell=shell, available=available):
+                    result = self.run_process([shell, "-fc", r'''
+source "$DOTFILES_TEST_REPO/shell/functions.sh"
+source "$DOTFILES_TEST_REPO/shell/bootstrap.sh"
+printf '%s %s' "$EDITOR" "$VISUAL"
+'''])
+                    self.assert_success(result)
+                    self.assertEqual(result.stdout, f"{available[0]} {available[0]}")
+
     def test_prompt_cleanup_and_existing_hook(self):
         self.link_shell()
         result = self.run_process([ZSH, "-dfc", r'''
@@ -232,7 +251,8 @@ class IntegrationTests(DotfilesTest):
             self.assert_success(self.run_process(command))
         self.assertEqual((self.user_dir / ".zshrc").resolve(), REPO / "zshrc")
         self.assertEqual((self.user_dir / "config/nvim").resolve(), REPO / "nvim")
-        self.assertFalse((self.user_dir / ".vimrc").exists())
+        self.assertEqual((self.user_dir / ".vimrc").resolve(), REPO / "vimrc")
+        self.assertEqual((self.user_dir / ".vim").resolve(), REPO / "vim")
 
     @unittest.skipUnless((REPO / ".dotbot/bin/dotbot").exists(), "initialize the .dotbot submodule")
     def test_install_preserves_existing_claude_settings(self):
@@ -246,10 +266,15 @@ class IntegrationTests(DotfilesTest):
 
     @unittest.skipUnless(shutil.which("nvim"), "Neovim is required")
     def test_neovim_filetypes_shortcuts_and_local_override(self):
+        (self.user_dir / ".vimrc").symlink_to(REPO / "vimrc")
+        (self.user_dir / ".vim").symlink_to(REPO / "vim")
+        (self.user_dir / ".vimrc_local").write_text("let g:vim_local_loaded = 1\n")
         (self.user_dir / ".nvim_local.lua").write_text("vim.g.dotfiles_local_loaded = true\n")
         script = self.user_dir / "test.lua"
         script.write_text(r'''
 assert(vim.g.dotfiles_local_loaded)
+assert(vim.g.vim_local_loaded == nil)
+assert(vim.fn.exists(':NERDTreeToggle') == 0)
 assert(vim.fn.maparg('<C-j>', 'n') ~= '')
 vim.cmd('edit sample.yaml')
 assert(vim.bo.shiftwidth == 2 and vim.bo.expandtab)
@@ -268,6 +293,32 @@ vim.cmd('qa!')
 ''')
         result = self.run_process([shutil.which("nvim"), "--headless", "-u", str(REPO / "nvim/init.lua"), "-l", str(script)])
         self.assert_success(result)
+
+    @unittest.skipUnless(shutil.which("git"), "Git is required")
+    def test_git_diff_tool_works_with_either_editor(self):
+        (self.user_dir / ".gitconfig").symlink_to(REPO / "gitconfig")
+        (self.user_dir / "before").write_text("before\n")
+        (self.user_dir / "after").write_text("after\n")
+        self.env.pop("DISPLAY", None)
+        self.env["GIT_CONFIG_NOSYSTEM"] = "1"
+        for editor in ("vim", "nvim"):
+            fake_bin = self.user_dir / editor
+            fake_bin.mkdir()
+            for command in ("git", "basename", "cat", "cmp", "dirname", "grep", "mktemp", "rm", "sed", "tr"):
+                (fake_bin / command).symlink_to(shutil.which(command))
+            executable = fake_bin / editor
+            executable.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$HOME/editor-args"\n')
+            executable.chmod(0o755)
+            (fake_bin / (editor + "diff")).symlink_to(executable)
+            self.env.update(PATH=str(fake_bin), EDITOR=editor, VISUAL=editor)
+            with self.subTest(editor=editor):
+                result = self.run_process([str(fake_bin / "git"), "difftool", "--no-index", "--no-prompt", "--", "before", "after"])
+                # --no-index returns 1 for differing files even when the tool succeeds.
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                arguments = (self.user_dir / "editor-args").read_text().splitlines()
+                self.assertIn("-d", arguments)
+                self.assertEqual(arguments[-2:], ["before", "after"])
+                (self.user_dir / "editor-args").unlink()
 
     def test_vercmp_validates_expressions_on_modern_python(self):
         for expression, code in (("1.9 < 2.4 <= 3", 0), ("2.9 < 2.9a", 0), ("3 < 2", 1), ("oops", 2), ("1 < 2 <", 2), ("1 < 2 ?? 3", 2)):
@@ -318,6 +369,66 @@ if sys.argv[1] == 'new-session' and '-P' in sys.argv:
             self.assertEqual(result.stdout.strip(), "100")
         finally:
             self.run_process(command + ["kill-server"])
+
+
+@unittest.skipUnless(shutil.which("vim"), "Vim is required")
+class VimTests(DotfilesTest):
+    def setUp(self):
+        super().setUp()
+        self.vim = shutil.which("vim")
+        if not self.run_process([self.vim, "--version"]).stdout.startswith("VIM -"):
+            self.skipTest("vim points to another editor; install Vim to run these checks")
+
+    def check_vim(self, checks):
+        script = self.user_dir / "test.vim"
+        script.write_text(checks + r'''
+call assert_equal('', v:errmsg)
+if !empty(v:errors)
+    call writefile(v:errors, $HOME . '/vim-errors')
+    cquit 1
+endif
+qa!
+''')
+        result = self.run_process([self.vim, "-N", "-i", "NONE", "-n", "-es", "--cmd", "set t_Co=256", "-u", str(REPO / "vimrc"), "-S", str(script)])
+        errors = self.user_dir / "vim-errors"
+        self.assertEqual(result.returncode, 0, errors.read_text() if errors.exists() else result.stdout + result.stderr)
+        self.assertEqual(result.stderr, "")
+
+    def test_vim_plugins_filetypes_shortcuts_and_local_override(self):
+        self.assertTrue((REPO / "vim/pack/vendor/start/nerdtree/plugin/NERD_tree.vim").exists(), "initialize Vim plugin submodules")
+        (self.user_dir / ".vim").symlink_to(REPO / "vim")
+        (self.user_dir / ".vimrc_local").write_text("let g:dotfiles_local_loaded = 1\n")
+        self.check_vim(r'''
+call assert_equal(1, get(g:, 'dotfiles_local_loaded', 0))
+call assert_notequal('', maparg('<C-j>', 'n'))
+call assert_equal(2, exists(':NERDTreeToggle'))
+call assert_equal(2, exists(':CtrlPBuffer'))
+call assert_equal('solarized', g:colors_name)
+edit sample.yaml
+call assert_equal([2, 1], [&l:shiftwidth, &l:expandtab])
+edit main.go
+call assert_equal([8, 0], [&l:shiftwidth, &l:expandtab])
+edit Makefrag
+call assert_equal(['make', 0], [&l:filetype, &l:expandtab])
+edit sample.md
+call assert_equal(1, &l:spell)
+edit main.go
+call assert_equal(0, &l:spell)
+edit sample.txt
+call assert_equal(4, &l:shiftwidth)
+" Changing a buffer's filetype must also undo the previous type's settings.
+set filetype=yaml
+set filetype=go
+call assert_equal([8, 0, 0], [&l:shiftwidth, &l:expandtab, &l:spell])
+set filetype=text
+call assert_equal([4, 1, 1], [&l:shiftwidth, &l:expandtab, &l:spell])
+''')
+
+    def test_vim_starts_without_optional_plugins(self):
+        self.check_vim(r'''
+call assert_equal('default', g:colors_name)
+call assert_notequal('', maparg('<C-j>', 'n'))
+''')
 
 
 if __name__ == "__main__":
