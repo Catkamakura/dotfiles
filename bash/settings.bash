@@ -1,6 +1,4 @@
 HISTSIZE=1048576
 HISTFILE="$HOME/.bash_history"
-SAVEHIST=$HISTSIZE
+HISTFILESIZE=$HISTSIZE
 shopt -s histappend # append to history file
-
-export EDITOR=vim

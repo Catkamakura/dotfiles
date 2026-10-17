@@ -1,8 +1,8 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
-from distutils.version import LooseVersion
 import sys
 import operator
+import re
 
 str_to_operator = {
     '==': operator.eq,
@@ -13,20 +13,38 @@ str_to_operator = {
     '>=': operator.ge
 }
 
+def version_key(version):
+    # Natural ordering, as with the old LooseVersion helper. Numeric components
+    # compare numerically; suffixes sort after the corresponding bare version.
+    return tuple(
+        (0, int(part)) if part.isdigit() else (1, part)
+        for part in re.split(r'(\d+|[a-z]+|\.)', version)
+        if part and part != '.'
+    )
+
+
 def vercmp(expr):
     words = expr.split()
+    if len(words) < 3 or len(words) % 2 == 0:
+        raise ValueError('expected VERSION OP VERSION [OP VERSION ...]')
     comparisons = [words[i:i+3] for i in range(0, len(words)-2, 2)]
+    if any(op_str not in str_to_operator for _, op_str, _ in comparisons):
+        raise ValueError('supported operators: == != < <= > >=')
     for left, op_str, right in comparisons:
         op = str_to_operator[op_str]
-        if not op(LooseVersion(left), LooseVersion(right)):
+        if not op(version_key(left), version_key(right)):
             return False
     return True
 
 def main():
-    for line in sys.stdin:
-        if not vercmp(line):
-            exit(1)
-    exit(0)
+    try:
+        for line in sys.stdin:
+            if not vercmp(line):
+                return 1
+    except ValueError as error:
+        print('vercmp: {}'.format(error), file=sys.stderr)
+        return 2
+    return 0
 
 def test():
     assert not vercmp('1.9 >= 2.4')
@@ -40,4 +58,4 @@ if __name__ == '__main__':
     if len(sys.argv) == 2 and sys.argv[1] == 'test':
         test()
     else:
-        main()
+        sys.exit(main())

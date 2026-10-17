@@ -2,53 +2,56 @@
 
 # Syntax highlighting
 
-source ~/.zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+if [[ -r ~/.zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]]; then
+    source ~/.zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 
-: ${ZSH_HIGHLIGHT_STYLES[histignorespace]:=bg=red}
+    : ${ZSH_HIGHLIGHT_STYLES[histignorespace]:=bg=red}
 
-_zsh_highlight_highlighter_histignorespace_predicate() {
-    [[ ${zsyh_user_options[histignorespace]:-off} == on ]] &&
-        _zsh_highlight_buffer_modified
-}
+    _zsh_highlight_highlighter_histignorespace_predicate() {
+        [[ ${zsyh_user_options[histignorespace]:-off} == on ]] &&
+            _zsh_highlight_buffer_modified
+    }
 
-_zsh_highlight_highlighter_histignorespace_paint() {
-    [[ $BUFFER[1] == ' ' ]] || return
-    integer end=1
-    while [[ $BUFFER[end] == ' ' ]]; do
-        (( end++ ))
-    done
-    _zsh_highlight_add_highlight 0 $((end - 1)) histignorespace
-}
+    _zsh_highlight_highlighter_histignorespace_paint() {
+        [[ $BUFFER[1] == ' ' ]] || return
+        integer end=1
+        while [[ $BUFFER[end] == ' ' ]]; do
+            (( end++ ))
+        done
+        _zsh_highlight_add_highlight 0 $((end - 1)) histignorespace
+    }
 
-ZSH_HIGHLIGHT_HIGHLIGHTERS=(main brackets pattern histignorespace)
+    ZSH_HIGHLIGHT_HIGHLIGHTERS=(main brackets pattern histignorespace)
 
-if [[ "$(tput colors)" == "256" ]]; then
-    ZSH_HIGHLIGHT_STYLES[default]=none
-    ZSH_HIGHLIGHT_STYLES[unknown-token]=fg=160
-    ZSH_HIGHLIGHT_STYLES[reserved-word]=fg=037,bold #,standout
-    ZSH_HIGHLIGHT_STYLES[alias]=fg=064,bold
-    ZSH_HIGHLIGHT_STYLES[builtin]=fg=064,bold
-    ZSH_HIGHLIGHT_STYLES[function]=fg=064,bold
-    ZSH_HIGHLIGHT_STYLES[command]=fg=064,bold
-    ZSH_HIGHLIGHT_STYLES[precommand]=fg=064,underline
-    ZSH_HIGHLIGHT_STYLES[commandseparator]=none
-    ZSH_HIGHLIGHT_STYLES[hashed-command]=fg=037
-    ZSH_HIGHLIGHT_STYLES[path]=fg=166,underline
-    ZSH_HIGHLIGHT_STYLES[globbing]=fg=033
-    ZSH_HIGHLIGHT_STYLES[history-expansion]=fg=white,underline
-    ZSH_HIGHLIGHT_STYLES[single-hyphen-option]=fg=125,bold
-    ZSH_HIGHLIGHT_STYLES[double-hyphen-option]=fg=125,bold
-    ZSH_HIGHLIGHT_STYLES[back-quoted-argument]=none
-    ZSH_HIGHLIGHT_STYLES[single-quoted-argument]=fg=136
-    ZSH_HIGHLIGHT_STYLES[double-quoted-argument]=fg=136
-    ZSH_HIGHLIGHT_STYLES[dollar-double-quoted-argument]=fg=136
-    ZSH_HIGHLIGHT_STYLES[back-double-quoted-argument]=fg=136
-    ZSH_HIGHLIGHT_STYLES[assign]=fg=037
-    ZSH_HIGHLIGHT_STYLES[histignorespace]=bg=160
+    if (( ${terminfo[colors]:-0} >= 256 )); then
+        ZSH_HIGHLIGHT_STYLES[default]=none
+        ZSH_HIGHLIGHT_STYLES[unknown-token]=fg=160
+        ZSH_HIGHLIGHT_STYLES[reserved-word]=fg=037,bold #,standout
+        ZSH_HIGHLIGHT_STYLES[alias]=fg=064,bold
+        ZSH_HIGHLIGHT_STYLES[builtin]=fg=064,bold
+        ZSH_HIGHLIGHT_STYLES[function]=fg=064,bold
+        ZSH_HIGHLIGHT_STYLES[command]=fg=064,bold
+        ZSH_HIGHLIGHT_STYLES[precommand]=fg=064,underline
+        ZSH_HIGHLIGHT_STYLES[commandseparator]=none
+        ZSH_HIGHLIGHT_STYLES[hashed-command]=fg=037
+        ZSH_HIGHLIGHT_STYLES[path]=fg=166,underline
+        ZSH_HIGHLIGHT_STYLES[globbing]=fg=033
+        ZSH_HIGHLIGHT_STYLES[history-expansion]=fg=white,underline
+        ZSH_HIGHLIGHT_STYLES[single-hyphen-option]=fg=125,bold
+        ZSH_HIGHLIGHT_STYLES[double-hyphen-option]=fg=125,bold
+        ZSH_HIGHLIGHT_STYLES[back-quoted-argument]=none
+        ZSH_HIGHLIGHT_STYLES[single-quoted-argument]=fg=136
+        ZSH_HIGHLIGHT_STYLES[double-quoted-argument]=fg=136
+        ZSH_HIGHLIGHT_STYLES[dollar-double-quoted-argument]=fg=136
+        ZSH_HIGHLIGHT_STYLES[back-double-quoted-argument]=fg=136
+        ZSH_HIGHLIGHT_STYLES[assign]=fg=037
+        ZSH_HIGHLIGHT_STYLES[histignorespace]=bg=160
+    fi
 fi
 
 # dircolors
 
-if [[ "$(tput colors)" == "256" ]]; then
-    eval $(dircolors =(cat ~/.shell/plugins/dircolors-solarized/dircolors.256dark ~/.shell/dircolors.extra))
+if (( ${terminfo[colors]:-0} >= 256 )) && (( $+commands[dircolors] )) &&
+        [[ -r ~/.shell/plugins/dircolors-solarized/dircolors.256dark ]]; then
+    eval "$(dircolors -b =(cat ~/.shell/plugins/dircolors-solarized/dircolors.256dark ~/.shell/dircolors.extra))"
 fi

@@ -6,10 +6,46 @@ on:
     - cron: '0 8 * * 6'
 jobs:
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v2
-      - run: |
-          mkdir -p ~/dotfiles-install-dir
-      - run: |
-          HOME=~/dotfiles-install-dir ./install
+      - uses: actions/checkout@v7
+      - name: Install test tools (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y zsh tmux shellcheck
+      - name: Install test tools (macOS)
+        if: runner.os == 'macOS'
+        run: brew install tmux shellcheck
+      - name: Install Neovim 0.11.6
+        shell: bash
+        run: |
+          case "$(uname -s)-$(uname -m)" in
+            Linux-x86_64) nvim_archive=nvim-linux-x86_64 ;;
+            Darwin-arm64) nvim_archive=nvim-macos-arm64 ;;
+            Darwin-x86_64) nvim_archive=nvim-macos-x86_64 ;;
+            *) exit 1 ;;
+          esac
+          curl --fail --location --retry 3 \
+            "https://github.com/neovim/neovim/releases/download/v0.11.6/${nvim_archive}.tar.gz" \
+            -o "$RUNNER_TEMP/nvim.tar.gz"
+          tar -xzf "$RUNNER_TEMP/nvim.tar.gz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/$nvim_archive/bin" >> "$GITHUB_PATH"
+      - name: Initialize installer and shell plugins
+        run: git submodule update --init --recursive -- .dotbot shell/plugins/ zsh/plugins/
+      - name: Shell checks
+        shell: bash
+        run: |
+          for config in zshrc zsh/*.zsh zsh/plugins/spectrum.zsh bin/git-diff-changes; do
+            zsh -n "$config"
+          done
+          shellcheck -s bash -S warning -e SC1090,SC2034 \
+            bashrc bash_profile bash/*.bash shell/*.sh install bin/tmx
+      - name: Integration tests
+        run: |
+          python3 -m venv "$RUNNER_TEMP/dotfiles-test-venv"
+          "$RUNNER_TEMP/dotfiles-test-venv/bin/pip" install pexpect==4.9.0
+          "$RUNNER_TEMP/dotfiles-test-venv/bin/python" tests/test_dotfiles.py

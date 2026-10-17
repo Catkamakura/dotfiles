@@ -1,3 +1,6 @@
+# SSH commands and other non-interactive shells must not load prompt/plugins.
+[[ $- == *i* ]] || return
+
 # Functions
 source ~/.shell/functions.sh
 

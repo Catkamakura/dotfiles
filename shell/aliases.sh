@@ -1,6 +1,10 @@
 # Use colors in coreutils utilities output
-alias ls='ls --color=auto'
-alias grep='grep --color'
+if command ls --color=auto -d . >/dev/null 2>&1; then
+    alias ls='ls --color=auto'
+else
+    alias ls='ls -G' # BSD/macOS
+fi
+alias grep='grep --color=auto'
 
 # ls aliases
 alias ll='ls -lah'
@@ -35,22 +39,28 @@ syspip3() {
 }
 
 # cd to git root directory
-alias cdgr='cd "$(git root)"'
+cdgr() {
+    local root
+    root=$(git rev-parse --show-toplevel) || return
+    cd -- "$root" || return
+}
 
 # Create a directory and cd into it
 mcd() {
-    mkdir "${1}" && cd "${1}"
+    [[ $# -eq 1 ]] || return 2
+    mkdir -p -- "$1" && cd -- "$1" || return
 }
 
 # Jump to directory containing file
 jump() {
-    cd "$(dirname ${1})"
+    [[ $# -eq 1 ]] || return 2
+    cd -- "$(dirname -- "$1")" || return
 }
 
 # cd replacement for screen to track cwd (like tmux)
 scr_cd()
 {
-    builtin cd $1
+    builtin cd "$@" || return
     screen -X chdir "$PWD"
 }
 
@@ -61,16 +71,19 @@ fi
 # Go up [n] directories
 up()
 {
-    local cdir="$(pwd)"
+    local cdir=$PWD i
     if [[ "${1}" == "" ]]; then
         cdir="$(dirname "${cdir}")"
-    elif ! [[ "${1}" =~ ^[0-9]+$ ]]; then
-        echo "Error: argument must be a number"
-    elif ! [[ "${1}" -gt "0" ]]; then
-        echo "Error: argument must be positive"
+    elif [[ $1 == *[!0-9]* ]]; then
+        echo "Error: argument must be a number" >&2
+        return 2
+    elif [[ -z ${1//0/} ]]; then
+        echo "Error: argument must be positive" >&2
+        return 2
     else
-        for ((i=0; i<${1}; i++)); do
-            local ncdir="$(dirname "${cdir}")"
+        local count=$((10#$1)) ncdir
+        for ((i=0; i<count; i++)); do
+            ncdir="$(dirname "${cdir}")"
             if [[ "${cdir}" == "${ncdir}" ]]; then
                 break
             else
@@ -78,7 +91,7 @@ up()
             fi
         done
     fi
-    cd "${cdir}"
+    cd -- "${cdir}" || return
 }
 
 # Execute a command in a specific directory
@@ -101,7 +114,7 @@ fpr() {
         return 1
     fi
     (
-        cdgr
+        cdgr || return
         if [ "$#" -eq 1 ]; then
             local repo="${PWD##*/}"
             local user="${1%%:*}"

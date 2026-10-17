@@ -13,9 +13,10 @@ setopt prompt_subst
 
 # Load color variables to make it easier to color things
 autoload -U colors && colors
+zmodload zsh/terminfo
 
 # Make using 256 colors easier
-if [[ "$(tput colors)" == "256" ]]; then
+if (( ${terminfo[colors]:-0} >= 256 )); then
     source ~/.zsh/plugins/spectrum.zsh
     # change default colors
     fg[red]=$FG[160]
@@ -45,7 +46,7 @@ function PR_DIR() {
     if [[ "${sub}" == "" ]]; then
         sub=3
     fi
-    local len="$(expr ${sub} + 1)"
+    local len=$((sub + 1))
     local full="$(print -P "%d")"
     local relfull="$(print -P "%~")"
     local shorter="$(print -P "%${len}~")"
@@ -57,7 +58,7 @@ function PR_DIR() {
         current=${shorter}
     fi
 
-    local truncated="$(echo "${current%/*}/")"
+    local truncated="${current%/*}/"
 
     # Handle special case of directory '/' or '~something'
     if [[ "${truncated}" == "/" || "${relfull[1,-2]}" != */* ]]; then
@@ -70,7 +71,9 @@ function PR_DIR() {
         last=${last[2,-1]} # take substring
     fi
 
-    echo "%{$fg[green]%}${truncated}%{$fg[orange]%}%B${last}%b%{$reset_color%}"
+    truncated=${truncated//\%/%%}
+    last=${last//\%/%%}
+    print -r -- "%{$fg[green]%}${truncated}%{$fg[orange]%}%B${last}%b%{$reset_color%}"
 }
 
 # An exclamation point if the previous command did not complete successfully
@@ -97,27 +100,21 @@ function RPR_USER() {
 
 function machine_name() {
     if [[ -f $HOME/.name ]]; then
-        cat $HOME/.name
+        cat "$HOME/.name"
     else
         hostname
     fi
 }
 
-PROMPT_PYTHON="$(command -v python || command -v python3 || command -v python2)"
-
 function hash_to_color() {
-    local colors
+    local -a colors
     colors=(cyan green yellow red pink)
-    local index=$("$PROMPT_PYTHON" <<EOF
-import hashlib
-
-hash = int(hashlib.sha1('${1}'.encode('utf8')).hexdigest(), 16)
-index = hash % ${#colors} + 1
-
-print(index)
-EOF
-    )
-    echo "$colors[index]"
+    local char
+    local -i hash=0
+    for char in ${(s::)1}; do
+        (( hash = (hash * 31 + #char) & 0x7fffffff ))
+    done
+    print -r -- "$colors[$((hash % ${#colors} + 1))]"
 }
 
 # Host in a deterministically chosen color
@@ -125,7 +122,9 @@ RPR_SHOW_HOST=true # Set to false to disable host in rhs prompt
 function RPR_HOST() {
     if [[ "${RPR_SHOW_HOST}" == "true" ]]; then
         local name="$(machine_name)"
-        echo "%{$fg[$(hash_to_color ${name})]%}${name}%{$reset_color%}"
+        local color=$(hash_to_color "$name")
+        name=${name//\%/%%}
+        print -r -- "%{$fg[$color]%}${name}%{$reset_color%}"
     fi
 }
 
@@ -169,12 +168,14 @@ function parse_git_state() {
     # Compose this value via multiple conditional appends.
     local GIT_STATE="" GIT_DIFF=""
 
-    local NUM_AHEAD="$(git log --oneline @{u}.. 2> /dev/null | wc -l | tr -d ' ')"
+    local NUM_AHEAD=0 NUM_BEHIND=0 divergence
+    if divergence=$(git rev-list --left-right --count 'HEAD...@{upstream}' 2>/dev/null); then
+        read -r NUM_AHEAD NUM_BEHIND <<< "$divergence"
+    fi
     if [ "$NUM_AHEAD" -gt 0 ]; then
     GIT_STATE=$GIT_STATE${GIT_PROMPT_AHEAD//NUM/$NUM_AHEAD}
     fi
 
-    local NUM_BEHIND="$(git log --oneline ..@{u} 2> /dev/null | wc -l | tr -d ' ')"
     if [ "$NUM_BEHIND" -gt 0 ]; then
         if [[ -n $GIT_STATE ]]; then
             GIT_STATE="$GIT_STATE "
@@ -182,8 +183,8 @@ function parse_git_state() {
     GIT_STATE=$GIT_STATE${GIT_PROMPT_BEHIND//NUM/$NUM_BEHIND}
     fi
 
-    local GIT_DIR="$(git rev-parse --git-dir 2> /dev/null)"
-    if [ -n $GIT_DIR ] && test -r $GIT_DIR/MERGE_HEAD; then
+    local git_dir="$(git rev-parse --git-dir 2> /dev/null)"
+    if [[ -n $git_dir && -r $git_dir/MERGE_HEAD ]]; then
         if [[ -n $GIT_STATE ]]; then
             GIT_STATE="$GIT_STATE "
         fi
@@ -218,7 +219,9 @@ function git_prompt_string() {
     if [[ "${RPR_SHOW_GIT}" == "true" ]]; then
         local git_where="$(parse_git_branch)"
         local git_detached="$(parse_git_detached)"
-        [ -n "$git_where" ] && echo " $GIT_PROMPT_PREFIX$(parse_git_state)%{$fg[magenta]%}%B${git_where#(refs/heads/|tags/)}%b$git_detached$GIT_PROMPT_SUFFIX"
+        git_where=${git_where#(refs/heads/|tags/)}
+        git_where=${git_where//\%/%%}
+        [ -n "$git_where" ] && print -r -- " $GIT_PROMPT_PREFIX$(parse_git_state)%{$fg[magenta]%}%B${git_where}%b$git_detached$GIT_PROMPT_SUFFIX"
     fi
 }
 
@@ -335,12 +338,13 @@ function RCMD() {
     fi
 }
 
-function precmd() {
+function _dotfiles_prompt_precmd() {
     typeset -g _PROMPT_ASYNC_FD
 
     # close last fd, we don't care about the result anymore
-    if [[ -n "$_PROMPT_ASYNC_FD" ]] && { true <&$_PROMPT_ASYNC_FD } 2>/dev/null; then
-        exec {_PROMPT_ASYNC_FD}<&-
+    if [[ -n ${_PROMPT_ASYNC_FD:-} ]]; then
+        zle -F "$_PROMPT_ASYNC_FD" 2>/dev/null
+        { exec {_PROMPT_ASYNC_FD}<&- } 2>/dev/null
     fi
 
     # compute prompt in a background process
@@ -353,13 +357,19 @@ function precmd() {
 }
 
 function async_prompt_complete() {
+    local fd=$1
     # read from fd
-    RPROMPT="$(<&$1)"
+    RPROMPT="$(<&$fd)"
 
     # remove the handler and close the fd
-    zle -F "$1"
-    exec {1}<&-
+    zle -F "$fd"
+    exec {fd}<&-
+    unset _PROMPT_ASYNC_FD
 
     # redisplay
     zle && zle reset-prompt
 }
+
+# Keep hooks installed by local configuration or other plugins.
+autoload -Uz add-zsh-hook
+add-zsh-hook precmd _dotfiles_prompt_precmd

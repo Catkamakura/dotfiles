@@ -1,3 +1,6 @@
+# Only initialize terminal settings in interactive shells.
+[[ -o interactive ]] || return
+
 # Functions
 source ~/.shell/functions.sh
 
